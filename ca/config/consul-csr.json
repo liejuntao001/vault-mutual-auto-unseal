@@ -1,0 +1,21 @@
+{
+  "CN": "server.dc1.cluster.local",
+  "hosts": [
+    "server.dc1.cluster.local",
+    "127.0.0.1",
+    "consul.consul.svc.cluster.local"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "ST": "Illinois",
+      "L": "Chicago",
+      "O": "Kubernetes",
+      "OU": "Consul"
+    }
+  ]
+}
