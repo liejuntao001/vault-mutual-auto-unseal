@@ -19,7 +19,7 @@ kubectl -n vault create configmap vault --from-file=vault.json=config/vault_auto
 
 # Add ingress
 ```
-DOMAIN=example.com envsubst < vault_ingress.yml | kubectl apply -f -
+DOMAIN=k8s.example.com envsubst < vault_ingress.yml | kubectl apply -f -
 ```
 
 # emergency unseal

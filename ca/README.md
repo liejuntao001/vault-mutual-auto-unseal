@@ -18,6 +18,14 @@ cfssl gencert \
     -ca-key=ca-key.pem \
     -config=config/ca-config.json \
     -profile=default \
+    config/consul-back-csr.json | cfssljson -bare consul-back
+```
+
+cfssl gencert \
+    -ca=ca.pem \
+    -ca-key=ca-key.pem \
+    -config=config/ca-config.json \
+    -profile=default \
     config/vault-csr.json | cfssljson -bare vault
 ```
 
@@ -60,9 +68,7 @@ kubectl -n vault-unlock create secret generic vault \
     --from-literal="gossip-encryption-key=${GOSSIP_ENCRYPTION_KEY}" \
     --from-file=ca.pem \
     --from-file=vault-unlock.pem \
-    --from-file=vault-unlock-key.pem \
-    --from-file=vault-client.pem \
-    --from-file=vault-client-key.pem
+    --from-file=vault-unlock-key.pem
 ```
 
 
