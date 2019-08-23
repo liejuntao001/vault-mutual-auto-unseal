@@ -1,0 +1,21 @@
+{
+  "CN": "vault.vault.svc.cluster.local",
+  "hosts": [
+    "vault",
+    "127.0.0.1",
+    "vault.vault.svc.cluster.local"
+  ],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "US",
+      "ST": "Illinois",
+      "L": "Chicago",
+      "O": "Kubernetes",
+      "OU": "Vault"
+    }
+  ]
+}

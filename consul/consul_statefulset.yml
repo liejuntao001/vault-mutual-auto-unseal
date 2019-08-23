@@ -1,0 +1,152 @@
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: consul-pdb
+  namespace: consul
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: consul
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: consul
+  namespace: consul
+spec:
+  selector:
+      matchLabels:
+        app: consul
+  serviceName: consul
+  replicas: 3
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: consul
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - consul
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 10
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: consul-exporter
+          args:
+          - --consul.server=127.0.0.1:8500
+          - --consul.ca-file=/etc/tls/ca.pem
+          - --consul.cert-file=/etc/tls/consul.pem
+          - --consul.key-file=/etc/tls/consul-key.pem
+          image: prom/consul-exporter:v0.4.0
+          volumeMounts:
+          - mountPath: /etc/tls
+            name: tls
+        - name: consul
+          image: "consul:1.5.0"
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GOSSIP_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: consul
+                  key: gossip-encryption-key
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CONSUL_LOCAL_CONFIG
+              value: '{ "ca_file": "/etc/tls/ca.pem", "cert_file": "/etc/tls/consul.pem",
+              "key_file": "/etc/tls/consul-key.pem", "verify_incoming": true, "verify_outgoing":
+              true, "verify_server_hostname": true, "ports": { "https": 8443 } }'
+          args:
+            - "consul"
+            - "agent"
+            - "-advertise=$(POD_IP)"
+            - "-bind=0.0.0.0"
+            - "-bootstrap-expect=3"
+            - "-retry-join=consul-0.consul.$(NAMESPACE).svc.cluster.local"
+            - "-retry-join=consul-1.consul.$(NAMESPACE).svc.cluster.local"
+            - "-retry-join=consul-2.consul.$(NAMESPACE).svc.cluster.local"
+            - "-client=0.0.0.0"
+            - "-config-file=/consul/config/local.json"
+            - "-datacenter=dc1"
+            - "-data-dir=/consul/data"
+            - "-domain=cluster.local"
+            - "-encrypt=$(GOSSIP_ENCRYPTION_KEY)"
+            - "-server"
+            - "-ui"
+            - "-disable-host-node-id"
+          readinessProbe:
+            # NOTE(mitchellh): when our HTTP status endpoints support the
+            # proper status codes, we should switch to that. This is temporary.
+            exec:
+              command:
+                - "/bin/sh"
+                - "-ec"
+                - |
+                  curl http://127.0.0.1:8500/v1/status/leader 2>/dev/null | \
+                  grep -E '".+"'
+            failureThreshold: 2
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /consul/data
+            - name: tls
+              mountPath: /etc/tls
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /bin/sh
+                - -c
+                - consul leave
+          ports:
+            - containerPort: 8500
+              name: ui-port
+            - containerPort: 8400
+              name: alt-port
+            - containerPort: 53
+              name: udp-port
+            - containerPort: 8443
+              name: https-port
+            - containerPort: 8080
+              name: http-port
+            - containerPort: 8301
+              name: serflan
+            - containerPort: 8302
+              name: serfwan
+            - containerPort: 8600
+              name: consuldns
+            - containerPort: 8300
+              name: server
+      volumes:
+        - name: tls
+          secret:
+            secretName: consul
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: rook-ceph-block
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 700Mi

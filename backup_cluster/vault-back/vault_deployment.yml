@@ -1,0 +1,135 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: vault-unlock
+  namespace: vault-unlock
+  labels:
+    app: vault
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: vault
+    spec:
+      containers:
+      - name: vault
+        command: ["vault", "server", "-config", "/config/vault.json"]
+        image: "vault:1.1.3"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8200
+          name: api
+        - containerPort: 8201
+          name: cluster-address
+        lifecycle:
+          preStop:
+            exec:
+              command: [
+                "sh", "-c",
+                # Introduce a delay to the shutdown sequence to wait for the
+                # pod eviction event to propagate.
+                "sleep 6",
+              ]
+        livenessProbe:
+          # Alive if Vault is successfully responding to requests
+          httpGet:
+            path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204&
+            port: 8200
+            scheme: HTTPS
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          # Ready depends on preference
+          httpGet:
+            path: /v1/sys/health?standbycode=204&
+            port: 8200
+            scheme: HTTPS
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: VAULT_CLUSTER_ADDR
+            value: "https://$(POD_IP):8201"
+          - name: VAULT_LOG_LEVEL
+            value: "INFO"
+          - name: VAULT_CACERT
+            value: "/etc/tls/ca.pem"
+        securityContext:
+          readOnlyRootFilesystem: true
+          capabilities:
+            add:
+              - IPC_LOCK
+        volumeMounts:
+          - name: vconfig
+            mountPath: /config
+          - name: tls
+            mountPath: /etc/tls
+      - name: consul-vault-agent
+        image: "consul:1.5.0"
+        imagePullPolicy: IfNotPresent
+        env:
+          - name: CONSUL_HTTP_SSL
+            value: "true"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: GOSSIP_ENCRYPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: vault
+                key: gossip-encryption-key
+          - name: NAMESPACE
+            value: consul-back
+        args:
+          - "agent"
+          - "-advertise=$(POD_IP)"
+          - "-retry-join=consul-0.consul.$(NAMESPACE).svc.cluster.local"
+          - "-retry-join=consul-1.consul.$(NAMESPACE).svc.cluster.local"
+          - "-retry-join=consul-2.consul.$(NAMESPACE).svc.cluster.local"
+          - "-encrypt=$(GOSSIP_ENCRYPTION_KEY)"
+          - "-config-file=/config/consul.json"
+          - "-domain=cluster.local"
+          - "-datacenter=dc1"
+          - "-disable-host-node-id"
+        volumeMounts:
+            - name: cconfig
+              mountPath: /config
+            - name: tls
+              mountPath: /etc/tls
+        lifecycle:
+          preStop:
+            exec:
+              command: [
+                "sh", "-c",
+                # shutdown vault first, then shutdown consul agent
+                "sleep 6 && consul leave"
+              ]
+      volumes:
+        - name: vconfig
+          configMap:
+            name: vault
+        - name: cconfig
+          configMap:
+            name: consul
+        - name: tls
+          secret:
+            secretName: vault
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - vault
+              topologyKey: kubernetes.io/hostname
