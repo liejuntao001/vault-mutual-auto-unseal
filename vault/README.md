@@ -22,7 +22,15 @@ kubectl -n vault create configmap vault --from-file=vault.json=config/vault_auto
 DOMAIN=k8s.example.com envsubst < vault_ingress.yml | kubectl apply -f -
 ```
 
-# emergency unseal
+# Switch to emergency unseal
 ```
 kubectl -n vault create configmap vault --from-file=vault.json=config/vault_emergency.json -o yaml --dry-run | kubectl replace -f -
+kubectl apply -f vault_deployment_emergency.yml
 ```
+
+# Switch to auto unseal
+```
+kubectl -n vault create configmap vault --from-file=vault.json=config/vault_autounseal.json -o yaml --dry-run | kubectl replace -f -
+kubectl apply -f vault_deployment.yml
+```
+
