@@ -1,15 +1,4 @@
 ---
-apiVersion: policy/v1beta1
-kind: PodDisruptionBudget
-metadata:
-  name: consul-pdb
-  namespace: consul
-spec:
-  maxUnavailable: 1
-  selector:
-    matchLabels:
-      app: consul
----
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -104,6 +93,14 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 3
             successThreshold: 1
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+              - consul
+              - members
+              - -http-addr=http://127.0.0.1:8500
+            initialDelaySeconds: 300
             timeoutSeconds: 5
           volumeMounts:
             - name: data
