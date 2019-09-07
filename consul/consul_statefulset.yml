@@ -38,6 +38,9 @@ spec:
           - --consul.cert-file=/etc/tls/consul.pem
           - --consul.key-file=/etc/tls/consul-key.pem
           image: prom/consul-exporter:v0.4.0
+          ports:
+          - name: metrics
+            containerPort: 9107
           volumeMounts:
           - mountPath: /etc/tls
             name: tls

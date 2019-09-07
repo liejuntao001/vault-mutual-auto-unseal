@@ -40,5 +40,8 @@ spec:
     - name: consuldns
       port: 8600
       targetPort: 8600
+    - name: metrics
+      port: 9107
+      targetPort: 9107
   selector:
     app: consul
